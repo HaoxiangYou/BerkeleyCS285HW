@@ -46,7 +46,7 @@ def build_mlp(
     in_size = input_size
     for _ in range(n_layers):
         layers.append(nn.Linear(in_size, size))
-        layers.append(nn.Tanh())
+        layers.append(nn.ReLU())
         in_size = size
     layers.append(nn.Linear(in_size, output_size))
 
@@ -129,7 +129,12 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         # through it. For example, you can return a torch.FloatTensor. You can also
         # return more flexible objects, such as a
         # `torch.distributions.Distribution` object. It's up to you!
-        raise NotImplementedError
+
+        mean = self.mean_net(observation)
+        std = torch.exp(self.logstd)
+        cov = torch.diag(std**2)
+        dist = distributions.MultivariateNormal(loc=mean, covariance_matrix=cov)
+        return dist.sample()
 
     def update(self, observations, actions):
         """
@@ -141,7 +146,22 @@ class MLPPolicySL(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
             dict: 'Training Loss': supervised learning loss
         """
         # TODO: update the policy and return the loss
-        loss = TODO
+        # Log-likelihood is given by \sum_i [logp(a_i|o_i)]
+
+        self.optimizer.zero_grad()
+    
+        mean = self.mean_net(observations)
+        std = torch.exp(self.logstd)
+        cov = torch.diag(std**2)
+        dist = distributions.MultivariateNormal(loc=mean, covariance_matrix=cov)
+        
+    
+        logp = dist.log_prob(actions)
+        loss = -torch.sum(logp)
+        
+        loss.backward()
+        self.optimizer.step()
+
         return {
             # You can add extra logging information here, but keep this line
             'Training Loss': ptu.to_numpy(loss),
